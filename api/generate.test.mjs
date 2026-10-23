@@ -144,4 +144,22 @@ describe('generation API validation', () => {
       globalThis.fetch = originalFetch
     }
   })
+
+  it('reports an unexpected provider status without logging notes or secrets', async () => {
+    const originalFetch = globalThis.fetch
+    const originalConsoleError = console.error
+    const logMessages = []
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'Bad request' } }), { status: 400 })
+    console.error = (...args) => logMessages.push(args.join(' '))
+    try {
+      const result = await generateQuiz(valid, { GEMINI_API_KEY: 'server-only-secret' })
+      assert.equal(result.status, 502)
+      assert.match(result.body.error, /HTTP 400/)
+      assert.match(logMessages[0], /httpStatus=400/)
+      assert.doesNotMatch(logMessages[0], /server-only-secret|Photosynthesis/)
+    } finally {
+      globalThis.fetch = originalFetch
+      console.error = originalConsoleError
+    }
+  })
 })

@@ -70,13 +70,19 @@ export async function generateQuiz(body, env = process.env) {
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
+      const providerCode = Number.isInteger(payload?.error?.code) ? payload.error.code : response.status
+      const providerStatus = typeof payload?.error?.status === 'string' ? payload.error.status : 'unknown'
+      // Log only provider metadata. Never log the API key or submitted study notes.
+      console.error(`[quiz-generation] Gemini request failed: model=${model} httpStatus=${response.status} providerCode=${providerCode} providerStatus=${providerStatus}`)
       const message = response.status === 401 || response.status === 403
         ? 'The Gemini API key was rejected or lacks access. Check GEMINI_API_KEY and the key’s model permissions.'
         : response.status === 429
           ? 'The AI provider rate limit or available quota was reached. Check your API billing and limits.'
           : response.status === 404
             ? 'The configured Gemini model was not found. Check GEMINI_MODEL.'
-            : 'The AI service could not generate a quiz. Please try again.'
+            : response.status === 400
+              ? 'Gemini rejected the generation request (HTTP 400). Check the configured model and try fewer questions.'
+              : `The AI service returned an error (HTTP ${response.status}). Please try again; check the server logs if it continues.`
       return { status: response.status === 429 ? 429 : 502, body: { error: message } }
     }
     const candidate = payload?.candidates?.[0]
