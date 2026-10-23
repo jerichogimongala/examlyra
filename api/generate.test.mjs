@@ -26,6 +26,7 @@ describe('generation API validation', () => {
     const originalFetch = globalThis.fetch
     let apiKeyHeader = ''
     let requestUrl = ''
+    let requestBody
     const questions = Array.from({ length: 5 }, (_, index) => ({
       question: `Question ${index + 1}?`, options: ['A', 'B', 'C', 'D'], correctAnswer: 0,
       explanation: 'Because the notes say so.', difficulty: 'Medium', sourceReference: 'Topic',
@@ -33,6 +34,7 @@ describe('generation API validation', () => {
     globalThis.fetch = async (url, options) => {
       requestUrl = String(url)
       apiKeyHeader = options.headers['x-goog-api-key']
+      requestBody = JSON.parse(options.body)
       return new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ title: 'Photosynthesis', questions, insufficientNotes: false, message: '' }) }] } }] }), { status: 200 })
     }
     try {
@@ -43,6 +45,8 @@ describe('generation API validation', () => {
       assert.equal(result.body.quiz.questions[0].id.endsWith('-1'), true)
       assert.match(requestUrl, /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-3\.8-flash:generateContent/)
       assert.equal(apiKeyHeader, 'server-only-secret')
+      assert.equal(requestBody.generationConfig.thinkingConfig.thinkingLevel, 'low')
+      assert.equal(requestBody.generationConfig.responseMimeType, 'application/json')
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -58,6 +62,18 @@ describe('generation API validation', () => {
       assert.equal(result.status, 422)
       assert.match(result.body.error, /isn't enough detail/)
       assert.match(result.body.error, /5 distinct questions/)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('returns an actionable message when the Gemini request times out', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => { throw Object.assign(new Error('Timed out'), { name: 'TimeoutError' }) }
+    try {
+      const result = await generateQuiz(valid, { GEMINI_API_KEY: 'server-only-secret' })
+      assert.equal(result.status, 502)
+      assert.match(result.body.error, /fewer questions or shorter notes/)
     } finally {
       globalThis.fetch = originalFetch
     }
