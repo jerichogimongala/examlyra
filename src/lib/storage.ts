@@ -44,6 +44,20 @@ export function persistSavedQuizzes(quizzes: SavedQuiz[], storage: StoragePort |
   }
 }
 
+export function saveQuiz(current: SavedQuiz[], quiz: QuizAttempt['quiz']): SavedQuiz[] {
+  if (current.some((item) => item.id === quiz.id)) return current
+  const record: SavedQuiz = {
+    ...quiz,
+    bestScore: null,
+    lastScore: null,
+    attemptCount: 0,
+    lastAnswers: {},
+    lastSubmittedQuestionIds: [],
+    lastAttemptId: null,
+  }
+  return [record, ...current]
+}
+
 export function saveAttempt(
   current: SavedQuiz[],
   attempt: QuizAttempt,

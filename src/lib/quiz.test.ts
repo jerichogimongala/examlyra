@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { createMockQuiz, getIncorrectQuestions, getNextPendingQuestionIndex, scoreQuiz, validateNotes } from './quiz.ts'
-import { ACTIVE_ATTEMPT_KEY, deleteSavedQuiz, loadSavedQuizzes, persistSavedQuizzes, readActiveAttempt, saveAttempt, SAVED_QUIZZES_KEY } from './storage.ts'
+import { ACTIVE_ATTEMPT_KEY, deleteSavedQuiz, loadSavedQuizzes, persistSavedQuizzes, readActiveAttempt, saveAttempt, saveQuiz, SAVED_QUIZZES_KEY } from './storage.ts'
 import type { QuizAttempt } from '../types.ts'
 
 const settings = { questionCount: 5 as const, difficulty: 'Medium' as const, questionStyle: 'Mixed' as const }
@@ -52,6 +52,19 @@ describe('quiz logic', () => {
 })
 
 describe('saved quiz storage', () => {
+  it('saves a newly generated quiz to the browser library before it is attempted', () => {
+    const storage = makeMemoryStorage()
+    const quiz = createMockQuiz('sample notes', settings)
+    const saved = saveQuiz([], quiz)
+    assert.equal(saved.length, 1)
+    assert.equal(saved[0]?.id, quiz.id)
+    assert.equal(saved[0]?.attemptCount, 0)
+    assert.equal(saved[0]?.lastScore, null)
+    assert.equal(persistSavedQuizzes(saved, storage), true)
+    assert.equal(loadSavedQuizzes(storage).quizzes[0]?.title, quiz.title)
+    assert.equal(saveQuiz(saved, quiz).length, 1)
+  })
+
   it('loads an older in-progress quiz without losing it when skipped questions are added', () => {
     const storage = makeMemoryStorage()
     const attempt = createAttemptForStorage()

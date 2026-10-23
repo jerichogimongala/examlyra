@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
 import { mockQuestions } from './data/mockQuiz.ts'
 import { createAttempt, createMockQuiz, formatDate, getIncorrectQuestions, getNextPendingQuestionIndex, scoreQuiz, validateNotes } from './lib/quiz.ts'
-import { deleteSavedQuiz, loadSavedQuizzes, persistSavedQuizzes, readActiveAttempt, saveAttempt, writeActiveAttempt } from './lib/storage.ts'
+import { deleteSavedQuiz, loadSavedQuizzes, persistSavedQuizzes, readActiveAttempt, saveAttempt, saveQuiz, writeActiveAttempt } from './lib/storage.ts'
 import type { Quiz, QuizAttempt, QuizQuestion, QuizSettings, SavedQuiz } from './types.ts'
 
 type Screen = 'create' | 'library' | 'quiz' | 'results'
@@ -75,7 +75,8 @@ function App() {
     setBusy(true); setError(''); setNotice(''); setUsingMock(false)
     try {
       const quiz = await generateQuiz(notes, settings)
-      startQuiz(quiz)
+      setSaved(current => saveQuiz(current, quiz))
+      startQuiz(quiz, { savedQuizId: quiz.id })
     } catch (cause) {
       // Keep the prototype usable without API credentials or network access.
       if (cause instanceof TypeError || (cause instanceof Error && /fetch|network|not configured/i.test(cause.message))) {
@@ -84,7 +85,8 @@ function App() {
           return
         }
         const mock = createMockQuiz(notes, settings)
-        startQuiz(mock); setUsingMock(true)
+        setSaved(current => saveQuiz(current, mock))
+        startQuiz(mock, { savedQuizId: mock.id }); setUsingMock(true)
       } else setError(cause instanceof Error ? cause.message : 'Could not create a quiz.')
     } finally { setBusy(false) }
   }
@@ -162,7 +164,7 @@ function App() {
           <aside className="side-column"><div className="tip-card"><div className="tip-icon">✦</div><p className="eyebrow">A LITTLE STUDY TIP</p><h3>Test yourself<br/>before you peek.</h3><p>Active recall helps move what you learn into long-term memory. Give each question your best shot.</p><span className="tip-decoration">✳</span></div><button className="library-teaser" onClick={goLibrary}><span className="library-icon">▤</span><span><b>Your quiz library</b><small>{saved.length ? `${saved.length} saved ${saved.length === 1 ? 'quiz' : 'quizzes'}` : 'Your saved quizzes live here'}</small></span><span className="teaser-arrow">→</span></button><p className="mock-hint">New here? Try the demo with any notes. If the AI service isn’t configured, a sample quiz will open instead.</p></aside></div>
       </section>}
 
-      {screen === 'library' && <section className="content-page"><div className="page-toolbar"><div><p className="eyebrow">YOUR STUDY COLLECTION</p><h1>Quiz library<span className="heading-period">.</span></h1><p className="subheading">Saved quizzes stay in this browser only. Clearing its data may remove them.</p></div><button className="primary-button compact" onClick={() => setScreen('create')}>＋ Create a quiz</button></div>{saved.length === 0 ? <div className="empty-state"><div className="empty-illustration">▤</div><h2>A little empty in here.</h2><p>Save a quiz after finishing it and it’ll be waiting for your next study session.</p><button className="secondary-button" onClick={() => setScreen('create')}>Make your first quiz →</button></div> : <div className="quiz-list">{saved.map(item => <article className="saved-card" key={item.id}><div className="saved-icon">✳</div><div className="saved-main"><h2>{item.title}</h2><p>{item.questions.length} questions <span>·</span> {item.settings.difficulty} <span>·</span> Saved {formatDate(item.createdAt)}</p><div className="saved-stats"><span>↻ {item.attemptCount} {item.attemptCount === 1 ? 'attempt' : 'attempts'}</span><span>Last score <b>{item.lastScore ?? '—'}{item.lastScore !== null ? '%' : ''}</b></span><span>Best <b>{item.bestScore ?? '—'}{item.bestScore !== null ? '%' : ''}</b></span></div></div><div className="saved-actions"><button className="primary-button compact" onClick={() => startQuiz(item, { previousScore: item.lastScore, savedQuizId: item.id })}>Study again →</button><button className="text-button danger-text" onClick={() => { setSaved(current => deleteSavedQuiz(current, item.id)); if (attempt?.savedQuizId === item.id) updateAttempt(current => ({ ...current, savedQuizId: null })) }}>Remove</button></div></article>)}</div>}</section>}
+      {screen === 'library' && <section className="content-page"><div className="page-toolbar"><div><p className="eyebrow">YOUR STUDY COLLECTION</p><h1>Quiz library<span className="heading-period">.</span></h1><p className="subheading">Saved quizzes stay in this browser only. Clearing its data may remove them.</p></div><button className="primary-button compact" onClick={() => setScreen('create')}>＋ Create a quiz</button></div>{saved.length === 0 ? <div className="empty-state"><div className="empty-illustration">▤</div><h2>A little empty in here.</h2><p>New quizzes appear here automatically after they are generated.</p><button className="secondary-button" onClick={() => setScreen('create')}>Make your first quiz →</button></div> : <div className="quiz-list">{saved.map(item => <article className="saved-card" key={item.id}><div className="saved-icon">✳</div><div className="saved-main"><h2>{item.title}</h2><p>{item.questions.length} questions <span>·</span> {item.settings.difficulty} <span>·</span> Saved {formatDate(item.createdAt)}</p><div className="saved-stats"><span>↻ {item.attemptCount} {item.attemptCount === 1 ? 'attempt' : 'attempts'}</span><span>Last score <b>{item.lastScore ?? '—'}{item.lastScore !== null ? '%' : ''}</b></span><span>Best <b>{item.bestScore ?? '—'}{item.bestScore !== null ? '%' : ''}</b></span></div></div><div className="saved-actions"><button className="primary-button compact" onClick={() => startQuiz(item, { previousScore: item.lastScore, savedQuizId: item.id })}>Study again →</button><button className="text-button danger-text" onClick={() => { setSaved(current => deleteSavedQuiz(current, item.id)); if (attempt?.savedQuizId === item.id) updateAttempt(current => ({ ...current, savedQuizId: null })) }}>Remove</button></div></article>)}</div>}</section>}
 
       {screen === 'quiz' && attempt && question && <QuizView attempt={attempt} question={question} showExplanation={showExplanation} showSkippedQuestions={showSkippedQuestions} usingMock={usingMock} onSelect={selectAnswer} onSubmit={submitAnswer} onSkip={skipQuestion} onContinue={continueQuiz} onExit={() => setScreen('create')} onToggleSkipped={() => setShowSkippedQuestions(value => !value)} onChooseSkipped={chooseSkippedQuestion}/>}
       {screen === 'results' && attempt && score && <ResultsView attempt={attempt} score={score} saved={saved.some(item => item.id === attempt.quiz.id)} onSave={finishAndSave} onReview={reviewMistakes} onRetry={retry} onLibrary={goLibrary} onResumeSkipped={openSkippedQuestions} onHome={() => { clearAttempt(); setScreen('create') }} onNotice={setNotice} notice={notice}/>}
